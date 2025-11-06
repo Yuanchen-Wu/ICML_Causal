@@ -173,7 +173,6 @@ def partition_with_metis(G, num_partitions):
     (edgecuts, parts) = pymetis.part_graph(num_partitions,adj)
     return parts
 
-
 def compute_metric(IME, ISE, ITE, IME_est, ISE_est, ITE_est, printing=True):
     # Compute AME (Absolute Mean Error)
     IME_AME = np.abs(np.mean(IME) - np.mean(IME_est))
@@ -204,6 +203,7 @@ def compute_metric(IME, ISE, ITE, IME_est, ISE_est, ITE_est, printing=True):
         "ITE_PEHE": round(float(ITE_PEHE), 5)
     }
     return results
+
 def Baseline_compute(y,mhat,ehat,adj_matrix,n,treat_binary):
     first_column=(treat_binary-ehat)
     # first_column=(treat_binary-e_star)

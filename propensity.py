@@ -28,7 +28,7 @@ class PropensityPredictor(nn.Module):
   def get_embedding(self, X, A_norm):
     return self.compute_hidden(X, A_norm)
 
-def run_propensity_experiment(X, adj_matrix, treat_binary, y, m_star, partitions, hyperparams, aug=True, print_logs=False, device="cpu"):
+def fit_propensity(X, adj_matrix, treat_binary, y, m_star, partitions, hyperparams, aug=True, print_logs=False, device="cpu"):
   X_torch, A_norm, treat_torch, y_torch, d_var = to_torch(X, adj_matrix, treat_binary, y, device=device)
   if aug:
     X_torch_aug = torch.cat([X_torch, d_var], dim=1)
@@ -87,5 +87,8 @@ def run_propensity_experiment(X, adj_matrix, treat_binary, y, m_star, partitions
     best_models[fold] = best_model
 
   return ehat, best_models
+
+# Backwards compatibility
+run_propensity_experiment = fit_propensity
 
 

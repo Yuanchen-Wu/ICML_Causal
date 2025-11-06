@@ -65,8 +65,8 @@ class MeanPredictor(nn.Module):
   def get_embedding(self, X, A_norm):
     return self.compute_hidden(X, A_norm)
 
-def run_mean_experiment(X, adj_matrix, treat_binary, y, m_star, ehat, partitions, hyperparams, 
-                        bagging=True, aug=True, print_logs=False, device="cpu", agg_method='mean', flexible=False):
+def fit_mean(X, adj_matrix, treat_binary, y, m_star, ehat, partitions, hyperparams, 
+             bagging=True, aug=True, print_logs=False, device="cpu", agg_method='mean', flexible=False):
   X_torch, A_norm, treat_torch, y_torch, d_var = to_torch(X, adj_matrix, treat_binary, y, device=device)
   m_star_torch = torch.from_numpy(m_star).view(-1, 1).to(torch.float32).to(device)
   t_var = torch.from_numpy(ehat).view(-1, 1).to(torch.float32).to(device)
@@ -128,5 +128,8 @@ def run_mean_experiment(X, adj_matrix, treat_binary, y, m_star, ehat, partitions
         print("Improved by bagging")
       mhat = response_bagging
   return mhat, best_models
+
+# Backwards compatibility
+run_mean_experiment = fit_mean
 
 
