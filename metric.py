@@ -2,16 +2,83 @@ import numpy as np
 import torch
 
 
-def compute_effect(true_attention, A):
-    # Get the size of the matrix
-    n = true_attention.shape[0]
-    IME = torch.tensor(true_attention.diagonal(), dtype=torch.float32).numpy()
-    ISE = torch.tensor(np.sum(true_attention * (A - np.eye(n)), axis=1), dtype=torch.float32).numpy()
+def compute_individual_effects(
+    source,
+    A,
+    outcome_mode: str = "with_self",
+    g_self=None,
+    *,
+    X=None,
+    nbrs_idx=None,
+    t=None,
+):
+    """Compute IME/ISE/ITE in a unified way.
+
+    Usage:
+      - From attention matrix: compute_individual_effects(W, A, outcome_mode, g_self=...)
+      - From model: compute_individual_effects(model, A, outcome_mode, X=X, nbrs_idx=nbrs_idx, t=t)
+
+    with_self:
+      IME = diag(W); ISE = sum(W * (A - I)); ITE = IME + ISE
+    separate_self:
+      IME = g (self-treatment); ISE = sum(W * (A - I)); ITE = IME + ISE
+    """
+    # Resolve attention matrix and optional self weights
+    if hasattr(source, "predict") and X is not None and nbrs_idx is not None and t is not None:
+        # Model path
+        with torch.no_grad():
+            # Align X width with model's expected input dimension
+            X_arr = X
+            try:
+                if hasattr(source, "self_mlp") and isinstance(source.self_mlp[0], torch.nn.Linear):
+                    in_feats = int(source.self_mlp[0].in_features)
+                    if X_arr.shape[1] > in_feats:
+                        X_arr = X_arr[:, :in_feats]
+                elif hasattr(source, "attention_mlp") and isinstance(source.attention_mlp[0], torch.nn.Linear):
+                    pair_in = int(source.attention_mlp[0].in_features)
+                    in_feats = max(1, pair_in // 2)
+                    if X_arr.shape[1] > in_feats:
+                        X_arr = X_arr[:, :in_feats]
+            except Exception:
+                # Fallback: use X as-is if inspection fails
+                X_arr = X
+
+            X_t = torch.tensor(X_arr, dtype=torch.float32)
+            t_t = torch.tensor(t, dtype=torch.float32)
+            out = source.cpu().predict(X_t, nbrs_idx, t_t)
+        if isinstance(out, tuple) and len(out) == 3:
+            W, _, g = out
+        else:
+            W, _ = out
+            g = None
+    else:
+        # Matrix path
+        W = source
+        g = g_self
+
+    # Ensure numpy arrays
+    if isinstance(W, torch.Tensor):
+        W = W.detach().cpu().numpy()
+    if g is not None and isinstance(g, torch.Tensor):
+        g = g.detach().cpu().numpy()
+
+    n = A.shape[0]
+    if outcome_mode == "with_self":
+        IME = np.diag(W)
+        ISE = np.sum(W * (A - np.eye(n)), axis=1)
+        ITE = IME + ISE
+        return IME, ISE, ITE
+
+    # separate_self
+    if g is None:
+        raise ValueError("Self-treatment weights g are required for outcome_mode='separate_self'")
+    IME = np.asarray(g)
+    ISE = np.sum(W * (A - np.eye(n)), axis=1)
     ITE = IME + ISE
     return IME, ISE, ITE
 
 
-def compute_metric(IME, ISE, ITE, IME_est, ISE_est, ITE_est, printing=True):
+def evaluate(IME, ISE, ITE, IME_est, ISE_est, ITE_est, printing=True):
     # Compute AME (Absolute Mean Error)
     IME_AME = np.abs(np.mean(IME) - np.mean(IME_est))
     ISE_AME = np.abs(np.mean(ISE) - np.mean(ISE_est))

@@ -10,7 +10,7 @@ import time
 from utils import to_torch
 from model.propensity import PropensityPredictor
 from model.mean import MeanPredictor
-from model.interference import GCNWithAttention
+from model.interference import GCNWithAttentionOneHead, GCNWithAttentionTwoHead
 
 
 @dataclass
@@ -54,6 +54,8 @@ class MeanConfig:
 class AttentionConfig:
     hidden_dim: int = 128
     attn_temperature: float = 1.0
+    separate_self: bool = False
+    low_dimension: bool = False
 
 
 
@@ -95,7 +97,7 @@ def fit_propensity(data: GraphData, train_cfg: TrainConfig, prop_cfg: Propensity
             history["train_loss"].append(float(loss.item()))
             history["val_score"].append(float(test_loss.item()))
             if train_cfg.verbose and ((epoch + 1) % train_cfg.log_every == 0):
-                print(f"[propensity] Fold {fold}, Epoch {epoch+1:03d} | train: {loss.item():.6f} | fold_loss: {test_loss.item():.6f}")
+                print(f"[propensity] Fold {fold}, Epoch {epoch+1:03d} | train loss: {loss.item():.6f} | fold_loss: {test_loss.item():.6f}")
             if test_loss.item() < best_loss:
                 best_loss = test_loss.item()
                 best_logits_test = logits[test_idx].detach().clone()
@@ -143,7 +145,7 @@ def fit_mean(data: GraphData, train_cfg: TrainConfig, mean_cfg: MeanConfig, incl
             history["train_loss"].append(float(loss.item()))
             history["val_score"].append(float(test_loss.item()))
             if train_cfg.verbose and ((epoch + 1) % train_cfg.log_every == 0):
-                print(f"[mean] Fold {fold}, Epoch {epoch+1:03d} | train: {loss.item():.6f} | fold_loss: {test_loss.item():.6f}")
+                print(f"[mean] Fold {fold}, Epoch {epoch+1:03d} | train loss: {loss.item():.6f} | fold_loss: {test_loss.item():.6f}")
             if test_loss.item() < best_loss:
                 best_loss = test_loss.item()
                 best_pred_test = preds[test_idx].detach().clone()
@@ -158,6 +160,7 @@ def fit_attention(
     train_cfg: TrainConfig,
     attn_cfg: AttentionConfig,
     attn_true: Optional[np.ndarray] = None,
+    attn_true_self: Optional[np.ndarray] = None,
 ) -> FitResult:
     # Requirements
     if data.e_hat is None or data.mu_hat is None:
@@ -166,17 +169,25 @@ def fit_attention(
         raise ValueError("attn_true (ground-truth spillover weights) is required to compute and print spillover diff like run_gcn_experiment")
 
     device = train_cfg.device
-    x = torch.tensor(data.X, dtype=torch.float32, device=device)
+    X_used = data.X[:, :1] if attn_cfg.low_dimension else data.X
+    x = torch.tensor(X_used, dtype=torch.float32, device=device)
     y_resid = torch.tensor(data.y - data.mu_hat, dtype=torch.float32, device=device)
     t_t = torch.tensor(data.t, dtype=torch.float32, device=device)
     e_t = torch.tensor(data.e_hat, dtype=torch.float32, device=device)
 
     n = x.shape[0]
-    model = GCNWithAttention(
-        input_dim=x.shape[1],
-        hidden_dim=attn_cfg.hidden_dim,
-        b=float(attn_cfg.attn_temperature),
-    ).to(device)
+    if not attn_cfg.separate_self:
+        model = GCNWithAttentionOneHead(
+            input_dim=x.shape[1],
+            hidden_dim=attn_cfg.hidden_dim,
+            b=float(attn_cfg.attn_temperature),
+        ).to(device)
+    else:
+        model = GCNWithAttentionTwoHead(
+            input_dim=x.shape[1],
+            hidden_dim=attn_cfg.hidden_dim,
+            b=float(attn_cfg.attn_temperature),
+        ).to(device)
 
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.lr, weight_decay=train_cfg.weight_decay)
@@ -206,7 +217,10 @@ def fit_attention(
             batch_nbrs = [data.nbrs_idx[i] for i in idx_cpu]
 
             optimizer.zero_grad()
-            Y_pred, _ = model(x, batch_nbrs, t_t, e_t)
+            if not attn_cfg.separate_self:
+                Y_pred, _ = model(x, batch_nbrs, t_t, e_t)
+            else:
+                Y_pred, _, _ = model(x, batch_nbrs, t_t, e_t)
             loss = loss_fn(Y_pred, batch_Y)
             loss.backward()
             optimizer.step()
@@ -219,13 +233,19 @@ def fit_attention(
         # Evaluate spillover loss on the full dataset (no separate val split)
         model.eval()
         with torch.no_grad():
-            predicted_attention, _ = model.predict(x, data.nbrs_idx, t_t)
-        spillover_loss = float(np.sum((predicted_attention - attn_true) ** 2))
+            if not attn_cfg.separate_self:
+                attn_pred, _ = model.predict(x, data.nbrs_idx, t_t)
+                spillover_loss = float(np.sum((attn_pred - attn_true) ** 2))
+            else:
+                attn_pred, _, g_pred = model.predict(x, data.nbrs_idx, t_t)
+                spillover_loss = float(np.sum((attn_pred - attn_true) ** 2))
+                if attn_true_self is not None:
+                    spillover_loss += float(np.sum((g_pred - attn_true_self) ** 2))
         history["spillover_diff"].append(spillover_loss)
 
         if spillover_loss < best_spillover_loss:
             best_spillover_loss = spillover_loss
-            best_predicted_attention = predicted_attention
+            best_predicted_attention = attn_pred
             best_model = copy.deepcopy(model)
             no_improvement_count = 0
             if train_cfg.verbose:
@@ -246,7 +266,10 @@ def fit_attention(
     assert best_model is not None, "Training did not produce a best model"
     best_model.eval()
     with torch.no_grad():
-        preds, _ = best_model(x, data.nbrs_idx, t_t, e_t)
+        if not attn_cfg.separate_self:
+            preds, _ = best_model(x, data.nbrs_idx, t_t, e_t)
+        else:
+            preds, _, _ = best_model(x, data.nbrs_idx, t_t, e_t)
         spillover_pred = preds.detach().cpu().numpy().astype(np.float32)
 
     metrics: Dict[str, float] = {"best_spillover_diff": best_spillover_loss}
