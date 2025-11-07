@@ -85,11 +85,20 @@ def fit_propensity(data: GraphData, train_cfg: TrainConfig, prop_cfg: Propensity
         best_logits_test = None
         for epoch in range(train_cfg.epochs):
             model.train()
-            optimizer.zero_grad()
-            logits = model(X_aug, A_norm).squeeze(1)
-            loss = bce(logits[train_idx], t_t[train_idx].float())
-            loss.backward()
-            optimizer.step()
+            # Mini-batch over train indices (compute full forward but accumulate batch losses)
+            train_index_tensor = torch.tensor(train_idx, dtype=torch.long, device=train_cfg.device)
+            loader = DataLoader(train_index_tensor, batch_size=train_cfg.batch_size, shuffle=True)
+            running_loss = 0.0
+            num_batches = 0
+            for batch_indices in loader:
+                optimizer.zero_grad()
+                logits_full = model(X_aug, A_norm).squeeze(1)
+                loss = bce(logits_full[batch_indices], t_t[batch_indices].float())
+                loss.backward()
+                optimizer.step()
+                running_loss += float(loss.item())
+                num_batches += 1
+            loss = torch.tensor(running_loss / max(1, num_batches))
             model.eval()
             with torch.no_grad():
                 logits = model(X_aug, A_norm).squeeze(1)
@@ -133,11 +142,20 @@ def fit_mean(data: GraphData, train_cfg: TrainConfig, mean_cfg: MeanConfig, incl
         best_pred_test = None
         for epoch in range(train_cfg.epochs):
             model.train()
-            optimizer.zero_grad()
-            preds = model(X_aug, A_norm).squeeze(1)
-            loss = mse(preds[train_idx], y_t[train_idx].squeeze())
-            loss.backward()
-            optimizer.step()
+            # Mini-batch over train indices (compute full forward but accumulate batch losses)
+            train_index_tensor = torch.tensor(train_idx, dtype=torch.long, device=train_cfg.device)
+            loader = DataLoader(train_index_tensor, batch_size=train_cfg.batch_size, shuffle=True)
+            running_loss = 0.0
+            num_batches = 0
+            for batch_indices in loader:
+                optimizer.zero_grad()
+                preds_full = model(X_aug, A_norm).squeeze(1)
+                loss = mse(preds_full[batch_indices], y_t[batch_indices].squeeze())
+                loss.backward()
+                optimizer.step()
+                running_loss += float(loss.item())
+                num_batches += 1
+            loss = torch.tensor(running_loss / max(1, num_batches))
             model.eval()
             with torch.no_grad():
                 preds = model(X_aug, A_norm).squeeze(1)
