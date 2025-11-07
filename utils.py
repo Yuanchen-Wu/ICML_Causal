@@ -43,9 +43,9 @@ def load_data(file_name: str, feature_name: str, fold_num: int):
     )
     return trainX, trainA, valX, valA, testX, testA
 
-def to_torch(X, adj_matrix, treat_binary, y, symmetric_norm=True, device="cpu"):
+def to_torch(X, A, t, y, symmetric_norm=True, device="cpu"):
     X_torch = torch.tensor(X, dtype=torch.float32).to(device)
-    adj_torch = torch.from_numpy(adj_matrix).to(torch.float32).to(device)
+    adj_torch = torch.from_numpy(A).to(torch.float32).to(device)
     degree = adj_torch.sum(dim=1)
     D_inv = torch.diag(torch.pow(degree, -1))
     if symmetric_norm:
@@ -55,21 +55,21 @@ def to_torch(X, adj_matrix, treat_binary, y, symmetric_norm=True, device="cpu"):
       D_inv_sqrt = torch.diag(torch.pow(degree, -0.5)).to(device)
       A_norm = D_inv_sqrt @ adj_torch @ D_inv_sqrt
     
-    treat_torch = torch.tensor(treat_binary, dtype=torch.long).to(device)
+    treat_torch = torch.tensor(t, dtype=torch.long).to(device)
     y_torch = torch.from_numpy(y).view(-1, 1).to(torch.float32).to(device)
     d_var=(1/degree).view(-1,1)
     return X_torch, A_norm, treat_torch, y_torch, d_var
 
-def get_one_hop_neighbors(adj_matrix):
+def get_one_hop_neighbors(A):
     one_hop_neighbors = []
-    for i in range(adj_matrix.shape[0]):
-      one_hop_neighbors.append(torch.tensor((np.where(adj_matrix[i,:]!=0)[0])))
+    for i in range(A.shape[0]):
+      one_hop_neighbors.append(torch.tensor((np.where(A[i,:]!=0)[0])))
     return one_hop_neighbors
-def get_treat_neighbors(one_hop_neighbors, treat_binary):
-    treatment=torch.tensor(np.where(treat_binary == 1)[0])
+def get_treat_neighbors(nbrs_idx, t):
+    treatment=torch.tensor(np.where(t == 1)[0])
     treat_neighbor = [
-        neighbor[torch.isin(neighbor, treatment)].to(dtype=torch.long)  # Include node i itself
-        for i, neighbor in enumerate(one_hop_neighbors)
+        neighbor[torch.isin(neighbor, treatment)].to(dtype=torch.long)
+        for i, neighbor in enumerate(nbrs_idx)
     ]
     return treat_neighbor
 
@@ -127,13 +127,6 @@ def plot_PCA(X, ground_truth):
     # Display the plot
     plt.show()
 
-def compute_effect(true_attention, adj_matrix):
-    # Get the size of the matrix
-    n = true_attention.shape[0]
-    IME = torch.tensor(true_attention.diagonal(), dtype=torch.float32).numpy()  
-    ISE = torch.tensor(np.sum(true_attention * (adj_matrix - np.eye(n)), axis=1), dtype=torch.float32).numpy()
-    ITE = IME + ISE
-    return IME, ISE, ITE
 
 def plot_histogram(array, bins=10,title='histogram'):
     plt.hist(array.flatten(), bins=bins, edgecolor='black')
@@ -172,48 +165,3 @@ def partition_with_metis(G, num_partitions):
     adj = [list(G.neighbors(n)) for n in range(G.number_of_nodes())]
     (edgecuts, parts) = pymetis.part_graph(num_partitions,adj)
     return parts
-
-def compute_metric(IME, ISE, ITE, IME_est, ISE_est, ITE_est, printing=True):
-    # Compute AME (Absolute Mean Error)
-    IME_AME = np.abs(np.mean(IME) - np.mean(IME_est))
-    ISE_AME = np.abs(np.mean(ISE) - np.mean(ISE_est))
-    ITE_AME = np.abs(np.mean(ITE) - np.mean(ITE_est))
-
-    # Also report mean differences (signed)
-    IME_AME = np.mean(IME) - np.mean(IME_est)
-    ISE_AME = np.mean(ISE) - np.mean(ISE_est)
-    ITE_AME = np.mean(ITE) - np.mean(ITE_est)
-
-    # Compute PEHE (sqrt of mean squared error)
-    IME_PEHE = np.sqrt(np.mean((IME - IME_est)**2))
-    ISE_PEHE = np.sqrt(np.mean((ISE - ISE_est)**2))
-    ITE_PEHE = np.sqrt(np.mean((ITE - ITE_est)**2))
-
-    if printing:
-        print("IME: AME = {:.5f}, PEHE = {:.5f}".format(IME_AME, IME_PEHE))
-        print("ISE: AME = {:.5f}, PEHE = {:.5f}".format(ISE_AME, ISE_PEHE))
-        print("ITE: AME = {:.5f}, PEHE = {:.5f}".format(ITE_AME, ITE_PEHE))
-
-    results = {
-        "IME_AME": round(float(IME_AME), 5),
-        "ISE_AME": round(float(ISE_AME), 5),
-        "ITE_AME": round(float(ITE_AME), 5),
-        "IME_PEHE": round(float(IME_PEHE), 5),
-        "ISE_PEHE": round(float(ISE_PEHE), 5),
-        "ITE_PEHE": round(float(ITE_PEHE), 5)
-    }
-    return results
-
-def Baseline_compute(y,mhat,ehat,adj_matrix,n,treat_binary):
-    first_column=(treat_binary-ehat)
-    # first_column=(treat_binary-e_star)
-    second_column=(adj_matrix-np.eye(n)).dot(first_column)
-    predictor=np.column_stack((first_column,second_column))/np.sum(adj_matrix,1).reshape(-1, 1)
-    response = y - mhat
-    # predictor=np.column_stack((first_column,second_column))
-    beta_hat=np.linalg.inv(predictor.T @ predictor) @ (predictor.T @ response)
-    # DBML method (two parameter estimate)
-    IME_est=beta_hat[0]/np.sum(adj_matrix,1)
-    ISE_est=np.sum(beta_hat[1]*(adj_matrix-np.eye(n)),1)/np.sum(adj_matrix,1)
-    ITE_est=IME_est+ISE_est
-    return IME_est,ISE_est,ITE_est,beta_hat

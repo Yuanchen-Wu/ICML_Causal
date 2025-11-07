@@ -21,16 +21,13 @@ class GCNWithAttention(nn.Module):
         # Learnable scalar parameter b
         self.b = nn.Parameter(torch.tensor(b))  # e.g. start at 0.1
 
-    def forward(self, x, one_hop_neighbors, treat_binary, ehat):
+    def forward(self, x, nbrs_idx, t, e_hat):
         device = x.device
         n = x.size(0)
-        Y_pred = torch.zeros(len(one_hop_neighbors), device=device)
+        Y_pred = torch.zeros(len(nbrs_idx), device=device)
         pairwise_w_ij = torch.zeros(n, n, device=device)
 
-        tb = torch.tensor(treat_binary, device=device, dtype=torch.float32)
-        eh = torch.tensor(ehat, device=device, dtype=torch.float32)
-
-        for i, neighbors in enumerate(one_hop_neighbors):
+        for i, neighbors in enumerate(nbrs_idx):
             # 'neighbors' is a list/tensor of neighbor indices (including the node itself)
             current = int(neighbors[0].item() if torch.is_tensor(neighbors[0]) else neighbors[0])
             chosen = neighbors  # Use all neighbors
@@ -41,22 +38,21 @@ class GCNWithAttention(nn.Module):
 
             mlp_outputs = self.attention_mlp(z_concat).squeeze(dim=1)
             scores = torch.softmax(self.b * abs(mlp_outputs), dim=0)
-            prop_res = tb[chosen] - eh[chosen]
+            prop_res = t[chosen] - e_hat[chosen]
             pairwise = mlp_outputs * scores
 
             pairwise_w_ij[current, chosen] = pairwise
             Y_pred[i] = torch.sum(prop_res * pairwise)
 
         return Y_pred, pairwise_w_ij
-    def predict(self, x, one_hop_neighbors, treat_binary):
+    def predict(self, x, nbrs_idx, t):
       device = x.device
       n = x.size(0)
       # We'll store pairwise weights for all i,j in the neighborhood
       pairwise_w_ij = torch.zeros(n, n, device=device)
       pairwise_w_ij_raw = torch.zeros(n, n, device=device)
-      # Convert treat_binary, ehat to torch once
-      tb = torch.tensor(treat_binary, device=device, dtype=torch.float32)
-      for i, neighbors in enumerate(one_hop_neighbors):
+      # t is expected to be a tensor on the right device
+      for i, neighbors in enumerate(nbrs_idx):
         current = int(neighbors[0].item() if torch.is_tensor(neighbors[0]) else neighbors[0])
         # Use ALL neighbors (no sampling)
         num_neighbors = len(neighbors)
@@ -87,13 +83,15 @@ class TensorDataset(Dataset):
         return self.Y[idx],idx
 
 def run_gcn_experiment(
-    X, mhat, y, one_hop_neighbors, treat_binary, ehat,
-    true_attention, adj_matrix, sparse_param, hyperparams,
+    X, mu_hat, y, nbrs_idx, t, e_hat,
+    true_attention, A, attn_temperature, hyperparams,
     printing=True, device="cpu",patience=12
 ):
-    residual_y = torch.tensor(y, dtype=torch.float32, device=device) \
-                 - torch.tensor(mhat, dtype=torch.float32, device=device)
+    y_resid = torch.tensor(y, dtype=torch.float32, device=device) \
+                 - torch.tensor(mu_hat, dtype=torch.float32, device=device)
     x = torch.tensor(X, dtype=torch.float32, device=device)
+    t = torch.tensor(t, dtype=torch.float32, device=device)
+    e_hat = torch.tensor(e_hat, dtype=torch.float32, device=device)
 
     # Dimensions
     input_dim = x.shape[1]
@@ -103,13 +101,13 @@ def run_gcn_experiment(
     model = GCNWithAttention(
         input_dim,
         hyperparams["hidden_dim"],
-        b=float(sparse_param)
+        b=float(attn_temperature)
     ).to(device)
 
     loss_fn = nn.MSELoss()
 
     # Create DataLoader
-    dataset = TensorDataset(residual_y)
+    dataset = TensorDataset(y_resid)
     dataloader = DataLoader(dataset, batch_size=hyperparams["batch_size"], shuffle=True)
     optimizer = optim.Adam(model.parameters(), lr=hyperparams["lr"])
 
@@ -125,29 +123,29 @@ def run_gcn_experiment(
     for epoch in range(hyperparams["epochs"]):
         model.train()
         train_loss = 0
-        pairwise_w_ij_train = torch.zeros(n, n)
-        Y_pred_all = torch.zeros(n)
+        pairwise_w_ij_train = torch.zeros(n, n, device=device)
+        Y_pred_all = torch.zeros(n, device=device)
 
         # Training step
         for batch_Y, idx in dataloader:
             batch_Y = batch_Y.to(device)
             idx_cpu = idx.tolist()
-            batch_one_hop_neighbor = [one_hop_neighbors[i] for i in idx_cpu]
+            batch_one_hop_neighbor = [nbrs_idx[i] for i in idx_cpu]
 
             optimizer.zero_grad()
-            Y_pred, batch_pairwise_w_ij = model(x, batch_one_hop_neighbor, treat_binary, ehat)
+            Y_pred, batch_pairwise_w_ij = model(x, batch_one_hop_neighbor, t, e_hat)
             loss = loss_fn(Y_pred, batch_Y)
             loss.backward()
             optimizer.step()
 
             train_loss += loss.item()
-            Y_pred_all[idx] = Y_pred.detach().cpu()
-            pairwise_w_ij_train += batch_pairwise_w_ij.detach().cpu()
+            Y_pred_all[idx] = Y_pred.detach()
+            pairwise_w_ij_train += batch_pairwise_w_ij.detach()
 
         # Evaluate spillover loss on the full dataset
         model.eval()
         with torch.no_grad():
-            predicted_attention, _ = model.predict(x, one_hop_neighbors, treat_binary)
+            predicted_attention, _ = model.predict(x, nbrs_idx, t)
         spillover_loss = np.sum((predicted_attention - true_attention) ** 2)
 
         # Check improvement
@@ -187,16 +185,13 @@ class GCNWithAttention_sign(nn.Module):
         # Learnable scalar parameter b.
         self.b = nn.Parameter(torch.tensor(b, dtype=torch.float32))
 
-    def forward(self, x, one_hop_neighbors, treat_binary, ehat):
+    def forward(self, x, nbrs_idx, t, e_hat):
         device = x.device
         n = x.size(0)
-        Y_pred = torch.zeros(len(one_hop_neighbors), device=device)
+        Y_pred = torch.zeros(len(nbrs_idx), device=device)
         pairwise_w_ij = torch.zeros(n, n, device=device)
 
-        tb = torch.tensor(treat_binary, device=device, dtype=torch.float32)
-        eh = torch.tensor(ehat, device=device, dtype=torch.float32)
-
-        for i, neighbors in enumerate(one_hop_neighbors):
+        for i, neighbors in enumerate(nbrs_idx):
             # Ensure there is at least one index (self index should be present).
             if len(neighbors) < 1:
                 continue
@@ -218,7 +213,7 @@ class GCNWithAttention_sign(nn.Module):
                 # Compute softmax over scaled MLP outputs.
                 scores = torch.softmax(self.b * abs(mlp_neigh), dim=0)
                 # Compute treatment difference for neighbors.
-                prop_res = tb[chosen] - eh[chosen]
+                prop_res = t[chosen] - e_hat[chosen]
                 # Aggregate neighbor contribution.
                 neighbor_contrib = torch.sum(prop_res * mlp_neigh * scores)
                 # Record the pairwise weight (weighted MLP output).
@@ -230,15 +225,15 @@ class GCNWithAttention_sign(nn.Module):
 
         return Y_pred, pairwise_w_ij
 
-    def predict(self, x, one_hop_neighbors, treat_binary):
+    def predict(self, x, nbrs_idx, t):
         device = x.device
         n = x.size(0)
         pairwise_w_ij = torch.zeros(n, n, device=device)
         pairwise_w_ij_raw = torch.zeros(n, n, device=device)
 
         # Convert treatment and ehat to tensors.
-        tb = torch.tensor(treat_binary, device=device, dtype=torch.float32)
-        for i, neighbors in enumerate(one_hop_neighbors):
+        # t is expected to be a tensor on the right device
+        for i, neighbors in enumerate(nbrs_idx):
             if len(neighbors) < 1:
                 continue
 
@@ -258,13 +253,15 @@ class GCNWithAttention_sign(nn.Module):
         return pairwise_w_ij.cpu().numpy(), pairwise_w_ij_raw.cpu().numpy()
 
 def run_gcn_experiment_sign(
-    X, mhat, y, one_hop_neighbors, treat_binary, ehat,
-    true_attention, adj_matrix, sparse_param,hyperparams,
+    X, mu_hat, y, nbrs_idx, t, e_hat,
+    true_attention, A, attn_temperature,hyperparams,
     printing=True, device="cpu",patience=12
 ):
-    residual_y = torch.tensor(y, dtype=torch.float32, device=device) \
-                 - torch.tensor(mhat, dtype=torch.float32, device=device)
+    y_resid = torch.tensor(y, dtype=torch.float32, device=device) \
+                 - torch.tensor(mu_hat, dtype=torch.float32, device=device)
     x = torch.tensor(X, dtype=torch.float32, device=device)
+    t = torch.tensor(t, dtype=torch.float32, device=device)
+    e_hat = torch.tensor(e_hat, dtype=torch.float32, device=device)
 
     # Dimensions
     input_dim = x.shape[1]
@@ -274,13 +271,13 @@ def run_gcn_experiment_sign(
     model = GCNWithAttention_sign(
         input_dim,
         hyperparams["hidden_dim"],
-        b=float(sparse_param),
+        b=float(attn_temperature),
     ).to(device)
 
     loss_fn = nn.MSELoss()
 
     # Create DataLoader
-    dataset = TensorDataset(residual_y)
+    dataset = TensorDataset(y_resid)
     dataloader = DataLoader(dataset, batch_size=hyperparams["batch_size"], shuffle=True)
     optimizer = optim.Adam(model.parameters(), lr=hyperparams["lr"])
 
@@ -296,29 +293,29 @@ def run_gcn_experiment_sign(
     for epoch in range(hyperparams["epochs"]):
         model.train()
         train_loss = 0
-        pairwise_w_ij_train = torch.zeros(n, n)
-        Y_pred_all = torch.zeros(n)
+        pairwise_w_ij_train = torch.zeros(n, n, device=device)
+        Y_pred_all = torch.zeros(n, device=device)
 
         # Training step
         for batch_Y, idx in dataloader:
             batch_Y = batch_Y.to(device)
             idx_cpu = idx.tolist()
-            batch_one_hop_neighbor = [one_hop_neighbors[i] for i in idx_cpu]
+            batch_one_hop_neighbor = [nbrs_idx[i] for i in idx_cpu]
 
             optimizer.zero_grad()
-            Y_pred, batch_pairwise_w_ij = model(x, batch_one_hop_neighbor, treat_binary, ehat)
+            Y_pred, batch_pairwise_w_ij = model(x, batch_one_hop_neighbor, t, e_hat)
             loss = loss_fn(Y_pred, batch_Y)
             loss.backward()
             optimizer.step()
 
             train_loss += loss.item()
-            Y_pred_all[idx] = Y_pred.detach().cpu()
-            pairwise_w_ij_train += batch_pairwise_w_ij.detach().cpu()
+            Y_pred_all[idx] = Y_pred.detach()
+            pairwise_w_ij_train += batch_pairwise_w_ij.detach()
 
         # Evaluate spillover loss on the full dataset
         model.eval()
         with torch.no_grad():
-            predicted_attention, _ = model.predict(x, one_hop_neighbors, treat_binary)
+            predicted_attention, _ = model.predict(x, nbrs_idx, t)
         spillover_loss = np.sum((predicted_attention - true_attention) ** 2)
 
         # Check improvement
@@ -343,4 +340,5 @@ def run_gcn_experiment_sign(
 
     print(f"Time taken: {time.time() - start_time:.2f} seconds")
     return best_model, best_spillover_loss, best_predicted_attention
+
 

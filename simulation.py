@@ -70,7 +70,7 @@ def heter_nonlinear(X, coefs=(0.1, 0.3, -0.2, 0.2, 0.2, 0.3)):
   )
   return tau
 
-def get_true_attention(X, adj_matrix, name, sparse_param):
+def get_true_attention(X, A, name, attn_temperature):
   if name == "rbf":
     func = np.exp(-0.5 * (cdist(X, X, metric='euclidean') ** 2))
   if name == "cosine":
@@ -83,35 +83,35 @@ def get_true_attention(X, adj_matrix, name, sparse_param):
     func = np.tile(X.dot(beta), (X.shape[0], 1))
   if name == "heter_nonlinear":
     func = np.tile(heter_nonlinear(X), (X.shape[0], 1))
-  true_attention = row_sparse_softmax(func * adj_matrix, b=sparse_param)
+  true_attention = row_sparse_softmax(func * A, b=attn_temperature)
   return true_attention
 
-def compute_outcome(X, adj_matrix, treat_matrix, e_star, n, sigma, scale, sparse_param, name):
-  true_attention = get_true_attention(X, adj_matrix, name=name, sparse_param=sparse_param)
+def compute_outcome(X, A, treat_matrix, e_star, n, sigma, scale, attn_temperature, name):
+  true_attention = get_true_attention(X, A, name=name, attn_temperature=attn_temperature)
   spillover = np.sum(treat_matrix * true_attention, axis=1)
   U_0, noise = get_base(X, sigma=sigma, scale=scale)
   y = spillover + U_0 + noise
-  m_star = U_0 + np.sum(np.tile(e_star, (n, 1)) * adj_matrix * true_attention, axis=1)
+  m_star = U_0 + np.sum(np.tile(e_star, (n, 1)) * A * true_attention, axis=1)
   return true_attention, spillover, U_0, noise, y, m_star
 
-def simulate_treatment(X, adj_matrix, mode="train", beta=1.0, alpha=0.0, random_state=41, num_partitions=5):
-  adj_matrix = adj_matrix - np.eye(adj_matrix.shape[0])
-  one_hop_neighbors = get_one_hop_neighbors(adj_matrix)
-  one_hop_neighbors = [
+def simulate_treatment(X, A, mode="train", beta=1.0, alpha=0.0, random_state=41, num_partitions=5):
+  A = A - np.eye(A.shape[0])
+  nbrs_idx = get_one_hop_neighbors(A)
+  nbrs_idx = [
     torch.cat((torch.tensor([i], dtype=torch.long), tensor.to(dtype=torch.long)))
-    for i, tensor in enumerate(one_hop_neighbors)
+    for i, tensor in enumerate(nbrs_idx)
   ]
-  G = nx.from_numpy_array(adj_matrix)
-  adj_matrix = adj_matrix + np.eye(adj_matrix.shape[0])
+  G = nx.from_numpy_array(A)
+  A = A + np.eye(A.shape[0])
 
   n, d = X.shape
   partitions = None
   if mode == "train":
     partitions = np.array(partition_with_metis(G, num_partitions=num_partitions))
-  treat_binary, e_star = simulate_treatment_linear_avg(X, adj_matrix, beta=beta, alpha=alpha, random_state=random_state)
+  t, e_star = simulate_treatment_linear_avg(X, A, beta=beta, alpha=alpha, random_state=random_state)
 
-  treat_neighbor = get_treat_neighbors(one_hop_neighbors, treat_binary)
-  treat_matrix = np.tile(treat_binary, (n, 1)) * adj_matrix
-  return one_hop_neighbors, n, d, partitions, treat_binary, e_star, treat_neighbor, treat_matrix
+  treat_neighbor = get_treat_neighbors(nbrs_idx, t)
+  treat_matrix = np.tile(t, (n, 1)) * A
+  return nbrs_idx, n, d, partitions, t, e_star, treat_neighbor, treat_matrix
 
 
