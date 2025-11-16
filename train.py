@@ -48,6 +48,9 @@ class PropensityConfig:
 class MeanConfig:
     hidden_dim: int = 128
     dropout: float = 0.0
+    agg_method: str = 'mean'  # 'mean' or 'gat'
+    use_flexible_attention: bool = False
+    low_dimension: bool = False
 
 
 @dataclass
@@ -136,7 +139,14 @@ def fit_mean(data: GraphData, train_cfg: TrainConfig, mean_cfg: MeanConfig, incl
     for fold in folds:
         train_idx = np.where(data.fold_assignments != fold)[0]
         test_idx  = np.where(data.fold_assignments == fold)[0]
-        model = MeanPredictor(in_features=X_aug.shape[1], hidden_features=mean_cfg.hidden_dim, out_features=1, agg_method='mean').to(train_cfg.device)
+        model = MeanPredictor(
+            in_features=X_aug.shape[1],
+            hidden_features=mean_cfg.hidden_dim,
+            out_features=1,
+            agg_method=mean_cfg.agg_method,
+            use_flexible_attention=mean_cfg.use_flexible_attention,
+            low_dimension=mean_cfg.low_dimension,
+        ).to(train_cfg.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.lr, weight_decay=train_cfg.weight_decay)
         best_loss = float("inf")
         best_pred_test = None

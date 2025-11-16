@@ -132,8 +132,8 @@ class GCNWithAttentionTwoHead(nn.Module):
             # Self contribution
             g_i = self.self_mlp(z_i).squeeze()
             self_w_i[current] = g_i
+            # self_contrib = g_i * t[current]
             self_contrib = g_i * (t[current] - e_hat[current])
-
             # Neighbor contribution (exclude self)
             neigh_contrib = 0.0
             if len(neighbors) > 1:
