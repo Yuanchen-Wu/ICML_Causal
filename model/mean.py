@@ -4,12 +4,34 @@ import torch.nn.functional as F
  
 
 class MeanPredictor(nn.Module):
-  def __init__(self, in_features, hidden_features, out_features, agg_method='mean', use_flexible_attention=False):
+  def __init__(
+    self,
+    in_features,
+    hidden_features,
+    out_features,
+    agg_method: str = 'mean',
+    use_flexible_attention: bool = False,
+    low_dimension: bool = False,
+  ):
     super().__init__()
-    self.fc1 = nn.Linear(2 * in_features, hidden_features)
-    self.fc3 = nn.Linear(hidden_features, out_features)
     self.agg_method = agg_method
     self.use_flexible_attention = use_flexible_attention
+    self.low_dimension = low_dimension
+
+    # Optional learnable projection used only when low_dimension=True.
+    # This keeps base effects high-dimensional while allowing a separate
+    # low-dimensional component to be fed into the mean model.
+    self.proj = None  # shared projection for both X and Z
+    proj_dim = 0
+    if self.low_dimension:
+      self.proj = nn.Linear(in_features, 1, bias=False)
+      # We will concatenate proj(X) and proj(Z), so +2 dims in total
+      proj_dim = 2
+
+    # Input is [X, Z] or [X, Z, proj(X)] depending on low_dimension.
+    self.fc1 = nn.Linear(2 * in_features + proj_dim, hidden_features)
+    self.fc3 = nn.Linear(hidden_features, out_features)
+
     if self.agg_method == 'gat':
       self.gat_lin = nn.Linear(in_features, in_features, bias=False)
       if self.use_flexible_attention:
@@ -41,7 +63,12 @@ class MeanPredictor(nn.Module):
       Z = torch.matmul(alpha, H_trans)
     else:
       raise ValueError("Unknown aggregation method: choose 'mean' or 'gat'.")
-    Input = torch.cat([X, Z], dim=1)
+    if self.low_dimension and self.proj is not None:
+      proj_X = self.proj(X)      # shape (n, 1)
+      proj_Z = self.proj(Z)      # shape (n, 1)
+      Input = torch.cat([X, Z, proj_X, proj_Z], dim=1)
+    else:
+      Input = torch.cat([X, Z], dim=1)
     H = F.relu(self.fc1(Input))
     return H
 

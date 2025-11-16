@@ -80,7 +80,7 @@ def get_true_attention(X, A, name, attn_temperature, low_dimension: bool = False
     func = np.full((X_use.shape[0], X_use.shape[0]), 0.9)
     np.fill_diagonal(func, 1)
   if name == "heter":
-    beta = np.array([1 / X_use.shape[1]] * X_use.shape[1])
+    beta = np.array([1 / X_use.shape[1]] * X_use.shape[1])*5
     func = np.tile(X_use.dot(beta), (X_use.shape[0], 1))
   if name == "heter_nonlinear":
     func = np.tile(heter_nonlinear(X_use), (X_use.shape[0], 1))
@@ -93,7 +93,7 @@ def get_true_attention_no_self(X, A, name, attn_temperature, low_dimension: bool
   np.fill_diagonal(A_no_self, 0.0)
   return get_true_attention(X, A_no_self, name=name, attn_temperature=attn_temperature, low_dimension=low_dimension)
 
-def get_self_treatment_effect(X, name, seed=42, low_dimension: bool = False):
+def get_self_treatment_effect(X, name, seed=42, low_dimension: bool = False, w_self: float = 1.0):
   """Generate per-node scalar self-treatment effect g(X_i) for given name.
   - homo: constant 1.0
   - heter: linear X @ beta
@@ -104,26 +104,30 @@ def get_self_treatment_effect(X, name, seed=42, low_dimension: bool = False):
   X_use = X[:, :1] if low_dimension else X
   n, d = X_use.shape
   if name == "homo":
-    return np.ones(n, dtype=float)
+    return w_self * np.ones(n, dtype=float)
   if name == "heter":
     beta = rng.uniform(low=-1, high=1, size=d) / max(1, d)
-    return X_use.dot(beta)
+    g_base = X_use.dot(beta * 5)
+    return w_self * g_base
   # anchor-based versions for single-argument variants
   u = rng.normal(size=d)
   if name == "cosine":
     # cosine(X_i, u)
     x_norm = np.linalg.norm(X_use, axis=1) + 1e-8
     u_norm = np.linalg.norm(u) + 1e-8
-    return (X_use.dot(u)) / (x_norm * u_norm)
+    g_base = (X_use.dot(u)) / (x_norm * u_norm)
+    return w_self * g_base
   if name == "rbf":
     d2 = np.sum((X_use - u) ** 2, axis=1)
-    return np.exp(-0.5 * d2)
+    g_base = np.exp(-0.5 * d2)
+    return w_self * g_base
   # default
-  return np.ones(n, dtype=float)
+  return w_self * np.ones(n, dtype=float)
 
 def compute_outcome(
   X, A, treat_matrix, e_star, n, sigma, scale, attn_temperature, name,
-  outcome_mode: str = "with_self", self_name: str = None, t: np.ndarray = None, low_dimension: bool = False, **kwargs
+  outcome_mode: str = "with_self", self_name: str = None, t: np.ndarray = None, low_dimension: bool = False,
+  w_self: float = 1.0, **kwargs
 ):
   """Compute outcome under two settings controlled by outcome_mode.
 
@@ -153,9 +157,9 @@ def compute_outcome(
   A_no_self = A.copy(); np.fill_diagonal(A_no_self, 0.0)
   spillover = np.sum((treat_matrix * (1 - np.eye(n))) * true_attention, axis=1)
   U_0, noise = get_base(X, sigma=sigma, scale=scale)
-  g_true = get_self_treatment_effect(X, name=self_name or name, low_dimension=low_dimension)
+  g_true = get_self_treatment_effect(X, name=self_name or name, low_dimension=low_dimension, w_self=w_self)
   y = spillover + g_true * t + U_0 + noise
-  m_star = U_0 + np.sum(np.tile(e_star, (n, 1)) * A_no_self * true_attention, axis=1)
+  m_star = U_0 + np.sum(np.tile(e_star, (n, 1)) * A_no_self * true_attention, axis=1) + g_true * e_star
   return true_attention, spillover, U_0, noise, y, m_star, g_true
 
 def simulate_treatment(X, A, mode="train", beta=1.0, alpha=0.0, random_state=41, num_partitions=5, include_self_loop=True):
