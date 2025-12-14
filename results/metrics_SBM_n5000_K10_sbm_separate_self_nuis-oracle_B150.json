@@ -1,0 +1,574 @@
+{
+  "train": {
+    "IME_AME": -0.01178,
+    "ISE_AME": 0.00993,
+    "ITE_AME": -0.00185,
+    "IME_PEHE": 0.04512,
+    "ISE_PEHE": 0.07656,
+    "ITE_PEHE": 0.08697
+  },
+  "test": {
+    "IME_AME": -0.0125,
+    "ISE_AME": 0.00895,
+    "ITE_AME": -0.00355,
+    "IME_PEHE": 0.0459,
+    "ISE_PEHE": 0.08073,
+    "ITE_PEHE": 0.09051
+  },
+  "train_cfg_attn": {
+    "epochs": 400,
+    "lr": 0.0003,
+    "batch_size": 64,
+    "patience": 12,
+    "device": "cpu",
+    "log_every": 1,
+    "weight_decay": 0.0,
+    "seed": 41,
+    "verbose": true
+  },
+  "attn_cfg": {
+    "hidden_dim": 64,
+    "separate_self": true,
+    "low_dimension": false
+  },
+  "bootstrap": {
+    "B": 150,
+    "alpha": 0.05,
+    "multiplier_dist": "normal"
+  },
+  "nuisance": {
+    "fit_nuisance": false
+  },
+  "experiment": {
+    "n": 5000,
+    "num_communities": 10,
+    "p": 0.005,
+    "q": 0.0005,
+    "train_fraction": 0.7,
+    "outcome_mode": "separate_self",
+    "low_dimension": false,
+    "f_type": "cosine",
+    "g_type": "heter",
+    "attn_temperature": 0.0,
+    "beta": 1.0,
+    "alpha": 2.0,
+    "sigma": 0.05,
+    "scale": 5.0,
+    "num_partition": 3,
+    "ratio_self": 1.0
+  },
+  "coverage": {
+    "train": {
+      "attention": {
+        "B_total": 150,
+        "alpha": 0.05,
+        "n_nonzero": 23894,
+        "by_prefix": {
+          "15": {
+            "B_prefix": 15,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.913869590692224,
+              "covered": 21836
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "30": {
+            "B_prefix": 30,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9348790491336737,
+              "covered": 22338
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "45": {
+            "B_prefix": 45,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.942244915041433,
+              "covered": 22514
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "60": {
+            "B_prefix": 60,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9454256298652381,
+              "covered": 22590
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "75": {
+            "B_prefix": 75,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.947267096342178,
+              "covered": 22634
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "90": {
+            "B_prefix": 90,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9486900477107224,
+              "covered": 22668
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "105": {
+            "B_prefix": 105,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9495270779275132,
+              "covered": 22688
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "120": {
+            "B_prefix": 120,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9489411567757596,
+              "covered": 22674
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "135": {
+            "B_prefix": 135,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9493178203733155,
+              "covered": 22683
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "150": {
+            "B_prefix": 150,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9494433749058341,
+              "covered": 22686
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          }
+        }
+      },
+      "raw_scores": {
+        "B_total": 150,
+        "alpha": 0.05,
+        "n_nonzero": 23894,
+        "by_prefix": {
+          "15": {
+            "B_prefix": 15,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9122792332803215,
+              "covered": 21798
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "30": {
+            "B_prefix": 30,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9342094249602411,
+              "covered": 22322
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "45": {
+            "B_prefix": 45,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9411149242487654,
+              "covered": 22487
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "60": {
+            "B_prefix": 60,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9445467481376078,
+              "covered": 22569
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "75": {
+            "B_prefix": 75,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9462208085711894,
+              "covered": 22609
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "90": {
+            "B_prefix": 90,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9482296810914874,
+              "covered": 22657
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "105": {
+            "B_prefix": 105,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9486063446890433,
+              "covered": 22666
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "120": {
+            "B_prefix": 120,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9479367205156106,
+              "covered": 22650
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "135": {
+            "B_prefix": 135,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9482296810914874,
+              "covered": 22657
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          },
+          "150": {
+            "B_prefix": 150,
+            "n_nonzero": 23894,
+            "pointwise": {
+              "coverage": 0.9481878295806478,
+              "covered": 22656
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23894
+            }
+          }
+        }
+      }
+    },
+    "test": {
+      "attention": {
+        "B_total": 150,
+        "alpha": 0.05,
+        "n_nonzero": 23998,
+        "by_prefix": {
+          "15": {
+            "B_prefix": 15,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.910159179931661,
+              "covered": 21842
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "30": {
+            "B_prefix": 30,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9308692391032586,
+              "covered": 22339
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "45": {
+            "B_prefix": 45,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9377864822068506,
+              "covered": 22505
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "60": {
+            "B_prefix": 60,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9403283606967248,
+              "covered": 22566
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "75": {
+            "B_prefix": 75,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9424535377948162,
+              "covered": 22617
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "90": {
+            "B_prefix": 90,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9435786315526293,
+              "covered": 22644
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "105": {
+            "B_prefix": 105,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9447453954496208,
+              "covered": 22672
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "120": {
+            "B_prefix": 120,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9449120760063339,
+              "covered": 22676
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "135": {
+            "B_prefix": 135,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9448704058671556,
+              "covered": 22675
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "150": {
+            "B_prefix": 150,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9447453954496208,
+              "covered": 22672
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          }
+        }
+      },
+      "raw_scores": {
+        "B_total": 150,
+        "alpha": 0.05,
+        "n_nonzero": 23998,
+        "by_prefix": {
+          "15": {
+            "B_prefix": 15,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9102008500708393,
+              "covered": 21843
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "30": {
+            "B_prefix": 30,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.93203600300025,
+              "covered": 22367
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "45": {
+            "B_prefix": 45,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.938328194016168,
+              "covered": 22518
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "60": {
+            "B_prefix": 60,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9415784648720726,
+              "covered": 22596
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "75": {
+            "B_prefix": 75,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9435369614134511,
+              "covered": 22643
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "90": {
+            "B_prefix": 90,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9451620968414034,
+              "covered": 22682
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "105": {
+            "B_prefix": 105,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.945870489207434,
+              "covered": 22699
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "120": {
+            "B_prefix": 120,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9465788815734645,
+              "covered": 22716
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "135": {
+            "B_prefix": 135,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9465788815734645,
+              "covered": 22716
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          },
+          "150": {
+            "B_prefix": 150,
+            "n_nonzero": 23998,
+            "pointwise": {
+              "coverage": 0.9464122010167514,
+              "covered": 22712
+            },
+            "uniform": {
+              "coverage": 1.0,
+              "covered": 23998
+            }
+          }
+        }
+      }
+    }
+  }
+}
