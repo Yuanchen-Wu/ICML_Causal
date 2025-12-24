@@ -13,9 +13,9 @@ experiment:
   g_type: "heter"                 # self-treatment g(X_i) (used only if outcome_mode == "separate_self")
   attn_temperature: 0.0
 
-  # Semi-synthetic outcome generation hyperparameters
+  # Semi-synthetic treatment/outcome generation hyperparameters
   beta: 1.0
-  alpha: 2.0
+  alpha_treat: 2.0
   sigma: 0.05
   scale: 5.0
   num_partition: 3

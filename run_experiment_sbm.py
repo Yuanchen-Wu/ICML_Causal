@@ -59,7 +59,9 @@ def main(
     attn_temperature = float(exp_cfg.get("attn_temperature", 0.0))
 
     beta = float(exp_cfg.get("beta", 1.0))
-    alpha_treat = float(exp_cfg.get("alpha", 2.0))
+    # NOTE: renamed from experiment.alpha to experiment.alpha_treat to avoid
+    # collision with bootstrap.alpha (CI level). Keep backwards compatibility.
+    alpha_treat = float(exp_cfg.get("alpha_treat", exp_cfg.get("alpha", 2.0)))
     sigma = float(exp_cfg.get("sigma", 0.05))
     scale = float(exp_cfg.get("scale", 5.0))
     num_partition = int(exp_cfg.get("num_partition", 3))
