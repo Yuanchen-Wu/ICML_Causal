@@ -7,6 +7,10 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
 
+def _build_pair_features_torch(x_i, x_j):
+    return torch.cat([x_i, x_j], dim=-1)
+
+
 class GCNWithAttentionOneHead(nn.Module):
     def __init__(self, input_dim, hidden_dim,b):
         super(GCNWithAttentionOneHead, self).__init__()
@@ -73,6 +77,70 @@ class GCNWithAttentionOneHead(nn.Module):
         pairwise_w_ij[current, neighbors] = pairwise
         pairwise_w_ij_raw[current, neighbors]=mlp_outputs
       return pairwise_w_ij.cpu().numpy(),pairwise_w_ij_raw.cpu().numpy()
+
+
+class GCNWithSmoothDegreeAttentionOneHead(nn.Module):
+    """
+    Smooth, degree-normalized one-head neighbor model for IJ-friendly Hessians.
+    No abs, no softmax, no learnable b; pairwise weights are raw MLP outputs / degree.
+    """
+
+    def __init__(self, input_dim, hidden_dim, activation: str = "relu"):
+        super().__init__()
+        if activation == "relu":
+            activation_layer = nn.ReLU()
+        elif activation == "tanh":
+            activation_layer = nn.Tanh()
+        else:
+            raise ValueError(f"Unsupported activation for smooth degree attention: {activation}")
+        pair_input_dim = input_dim * 2
+        self.attention_mlp = nn.Sequential(
+            nn.Linear(pair_input_dim, hidden_dim),
+            activation_layer,
+            nn.Linear(hidden_dim, 1),
+        )
+
+    def forward(self, x, nbrs_idx, t, e_hat):
+        device = x.device
+        n = x.size(0)
+        Y_pred = torch.zeros(len(nbrs_idx), device=device)
+        pairwise_w_ij = torch.zeros(n, n, device=device)
+
+        for i, neighbors in enumerate(nbrs_idx):
+            current = int(neighbors[0].item() if torch.is_tensor(neighbors[0]) else neighbors[0])
+            chosen = neighbors
+            if len(chosen) == 0:
+                continue
+            z_i = x[current]
+            z_i_rep = z_i.unsqueeze(0).expand(len(chosen), -1)
+            pair_features = _build_pair_features_torch(z_i_rep, x[chosen])
+            raw_scores = self.attention_mlp(pair_features).squeeze(dim=1)
+            denom = float(max(1, len(chosen)))
+            pairwise = raw_scores / denom
+            prop_res = t[chosen] - e_hat[chosen]
+            pairwise_w_ij[current, chosen] = pairwise
+            Y_pred[i] = torch.sum(prop_res * pairwise)
+        return Y_pred, pairwise_w_ij
+
+    def predict(self, x, nbrs_idx, t):
+        device = x.device
+        n = x.size(0)
+        pairwise_w_ij = torch.zeros(n, n, device=device)
+        pairwise_w_ij_raw = torch.zeros(n, n, device=device)
+        for i, neighbors in enumerate(nbrs_idx):
+            current = int(neighbors[0].item() if torch.is_tensor(neighbors[0]) else neighbors[0])
+            chosen = neighbors
+            if len(chosen) == 0:
+                continue
+            z_i = x[current]
+            z_i_rep = z_i.unsqueeze(0).expand(len(chosen), -1)
+            pair_features = _build_pair_features_torch(z_i_rep, x[chosen])
+            raw_scores = self.attention_mlp(pair_features).squeeze(dim=1)
+            denom = float(max(1, len(chosen)))
+            pairwise = raw_scores / denom
+            pairwise_w_ij[current, chosen] = pairwise
+            pairwise_w_ij_raw[current, chosen] = raw_scores
+        return pairwise_w_ij.cpu().numpy(), pairwise_w_ij_raw.cpu().numpy()
 
 class TensorDataset(Dataset):
     def __init__(self, Y):
@@ -175,5 +243,88 @@ class GCNWithAttentionTwoHead(nn.Module):
                 pairwise_w_ij[current, chosen] = pairwise
                 pairwise_w_ij_raw[current, chosen] = mlp_neigh
 
+        return pairwise_w_ij.cpu().numpy(), pairwise_w_ij_raw.cpu().numpy(), self_w_i.cpu().numpy()
+
+
+class GCNWithSmoothDegreeAttentionTwoHead(nn.Module):
+    """
+    Smooth two-head model with degree-normalized neighbor head and smooth self head.
+    No abs, no softmax, no learnable b in neighbor spillover weights.
+    """
+
+    def __init__(self, input_dim, hidden_dim, activation: str = "relu"):
+        super().__init__()
+        if activation == "relu":
+            neigh_activation = nn.ReLU()
+            self_activation = nn.ReLU()
+        elif activation == "tanh":
+            neigh_activation = nn.Tanh()
+            self_activation = nn.Tanh()
+        else:
+            raise ValueError(f"Unsupported activation for smooth degree attention: {activation}")
+        pair_input_dim = input_dim * 2
+        self.neigh_mlp = nn.Sequential(
+            nn.Linear(pair_input_dim, hidden_dim),
+            neigh_activation,
+            nn.Linear(hidden_dim, 1),
+        )
+        self.self_mlp = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            self_activation,
+            nn.Linear(hidden_dim, 1),
+        )
+
+    def forward(self, x, nbrs_idx, t, e_hat):
+        device = x.device
+        n = x.size(0)
+        Y_pred = torch.zeros(len(nbrs_idx), device=device)
+        pairwise_w_ij = torch.zeros(n, n, device=device)
+        self_w_i = torch.zeros(n, device=device)
+
+        for i, neighbors in enumerate(nbrs_idx):
+            if len(neighbors) < 1:
+                continue
+            current = int(neighbors[0].item() if torch.is_tensor(neighbors[0]) else neighbors[0])
+            z_i = x[current]
+            g_i = self.self_mlp(z_i).squeeze()
+            self_w_i[current] = g_i
+            self_contrib = g_i * (t[current] - e_hat[current])
+            neigh_contrib = 0.0
+            if len(neighbors) > 1:
+                chosen = neighbors[1:]
+                z_i_rep = z_i.unsqueeze(0).expand(len(chosen), -1)
+                pair_features = _build_pair_features_torch(z_i_rep, x[chosen])
+                raw_scores = self.neigh_mlp(pair_features).squeeze(dim=1)
+                denom = float(max(1, len(chosen)))
+                pairwise = raw_scores / denom
+                prop_res = t[chosen] - e_hat[chosen]
+                neigh_contrib = torch.sum(prop_res * pairwise)
+                pairwise_w_ij[current, chosen] = pairwise
+            pairwise_w_ij[current, current] = 0.0
+            Y_pred[i] = self_contrib + neigh_contrib
+        return Y_pred, pairwise_w_ij, self_w_i
+
+    def predict(self, x, nbrs_idx, t):
+        device = x.device
+        n = x.size(0)
+        pairwise_w_ij = torch.zeros(n, n, device=device)
+        pairwise_w_ij_raw = torch.zeros(n, n, device=device)
+        self_w_i = torch.zeros(n, device=device)
+        for i, neighbors in enumerate(nbrs_idx):
+            if len(neighbors) < 1:
+                continue
+            current = int(neighbors[0].item() if torch.is_tensor(neighbors[0]) else neighbors[0])
+            z_i = x[current]
+            self_w_i[current] = self.self_mlp(z_i).squeeze()
+            if len(neighbors) > 1:
+                chosen = neighbors[1:]
+                z_i_rep = z_i.unsqueeze(0).expand(len(chosen), -1)
+                pair_features = _build_pair_features_torch(z_i_rep, x[chosen])
+                raw_scores = self.neigh_mlp(pair_features).squeeze(dim=1)
+                denom = float(max(1, len(chosen)))
+                pairwise = raw_scores / denom
+                pairwise_w_ij[current, chosen] = pairwise
+                pairwise_w_ij_raw[current, chosen] = raw_scores
+            pairwise_w_ij[current, current] = 0.0
         return pairwise_w_ij.cpu().numpy(), pairwise_w_ij_raw.cpu().numpy(), self_w_i.cpu().numpy()
 

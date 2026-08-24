@@ -51,17 +51,28 @@ def generate_sbm_graph(
     return A_full, np.array(ground_truth, dtype=int)
 
 
+# def generate_covariates(
+#     n: int,
+#     d: int = 5,
+#     seed: int = 42,
+# ) -> np.ndarray:
+#     """
+#     Generate i.i.d. Gaussian covariates X ~ N(0, I_d) of shape [n, d].
+#     """
+#     rng = np.random.RandomState(seed)
+#     return rng.normal(loc=0.0, scale=1.0, size=(n, d)).astype(np.float32)
+
 def generate_covariates(
     n: int,
     d: int = 5,
     seed: int = 42,
+    eps: float = 1e-8,
+    dtype=np.float32,
 ) -> np.ndarray:
-    """
-    Generate i.i.d. Gaussian covariates X ~ N(0, I_d) of shape [n, d].
-    """
     rng = np.random.RandomState(seed)
-    return rng.normal(loc=0.0, scale=1.0, size=(n, d)).astype(np.float32)
-
+    X = rng.normal(0.0, 1.0, size=(n, d)).astype(dtype)
+    norms = np.linalg.norm(X, axis=1, keepdims=True)
+    return X / np.maximum(norms, eps)
 
 def train_test_split_indices(
     n: int,

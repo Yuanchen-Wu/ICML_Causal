@@ -1,17 +1,29 @@
 experiment:
   # SBM graph parameters
-  n: 5000
-  num_communities: 10
-  p: 0.005
-  q: 0.0005
-  train_fraction: 0.7
+  # Use split-specific graph sizes/configs below.
+  sbm_splits:
+    # Train graph config
+    train:
+      n: 3000
+      num_communities: 3
+      p: 0.00333
+      q: 0.001
+    # Validation/test share this eval config
+    eval:
+      n: 1000
+      num_communities: 3
+      p: 0.01
+      q: 0.003
+  
+  train_fraction: 1.0
 
   # Outcome mode: "with_self" (single-head) or "separate_self" (two-head)
   outcome_mode: "separate_self"
   low_dimension: false            # whether to use only the first feature dim in f and g
 
   # Attention similarities
-  f_type: "cosine"                # neighbor attention f(X_i, X_j)
+  # Legacy options remain valid (e.g., "cosine", "rbf", "heter", ...).
+  f_type: "cosine"               # neighbor attention f(X_i, X_j)
   g_type: "heter"                 # self treatment g(X_i) (used only in separate_self mode)
   attn_temperature: 0.0
 
@@ -22,6 +34,7 @@ experiment:
   scale: 5.0
   num_partition: 3
   ratio_self: 1.0                 # weight of self vs neighbors in separate_self mode
+  graph_seed: 41
 
 nuisance:
   # If true, fit nuisance models to obtain (mu_hat, e_hat).
@@ -29,9 +42,36 @@ nuisance:
   fit_nuisance: false
 
 bootstrap:
-  B: 120
-  alpha: 0.05
-  multiplier_dist: "normal"       # "normal" or "rademacher"
+  B: 200
+  alpha: [0.05, 0.1]                     # can be a single float or a list of floats
+  multiplier_dist: "normal"      # "normal" | "rademacher" | "poisson"
+  # Unified bootstrap method selector:
+  #   "exact" = original multiplier bootstrap with B refits
+  #   "ij"    = one-step IJ approximation
+  #   "both"  = run both methods with paired multipliers and store comparison
+  bootstrap_method: "ij"
+  # IJ solver hyperparameters (optional)
+  ij_damping: 0.00032
+  ij_cg_iters: 10
+  ij_cg_tol: 1.0e-8
+  ij_solver: "lanczos"                 # "cg" (per-replicate CG) | "lanczos" (precomputed low-rank inverse) | "dense_direct" (precomputed dense direct solve)
+  ij_lanczos_m: 200               # Lanczos steps (Krylov subspace dimension)
+  ij_lanczos_k: 125                # top-k eigenpairs to keep
+  ij_lanczos_reorth: true         # full reorthogonalization (recommended)
+  # Print-only small exact-vs-IJ diagnostic (does not change saved metrics by default)
+  ij_diag: false
+  # Optional evaluation mask for uniform bands / coverage (diagnostic only; does NOT affect training)
+  eval_mask:
+    mode: "edges"                # fixed to edges; diagonal is always excluded in code
+  # Which split(s) to evaluate and save coverage for: train | test | both
+  eval_scope: "test"
+  # Optional node-level snapshot for individual_spillover at final B prefix.
+  # If enabled, store CI + true value for selected percentile nodes.
+  node_ci_snapshot:
+    enabled: true
+    percentiles: [0, 0.1, 0.9, 1]  # e.g. [0, 0.1, 0.9, 1]
+  use_ij: true
+  run_both_use_ij: false
 
 train_attn:
   epochs: 400
@@ -54,5 +94,7 @@ attn_cfg:
 output:
   output_dir: "results"
   tag: "sbm_separate_self"
+  # Optional: override filename prefix (default is "SBM_n{n}_K{num_communities}_{tag}")
+  # filename_prefix: "my_custom_prefix"
 
 

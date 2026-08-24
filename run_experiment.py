@@ -40,6 +40,7 @@ def main(
     exp_cfg = cfg.get("experiment", {})
     nuis_cfg = cfg.get("nuisance", {})
     boot_cfg = cfg.get("bootstrap", {})
+    eval_mask_cfg = boot_cfg.get("eval_mask")
     train_attn_cfg = cfg.get("train_attn", {})
     attn_cfg_dict = cfg.get("attn_cfg", {})
     out_cfg = cfg.get("output", {})
@@ -79,6 +80,16 @@ def main(
     multiplier_dist = boot_cfg.get("multiplier_dist", "normal")
     if multiplier_dist_override is not None:
         multiplier_dist = multiplier_dist_override
+
+    # ---- Eval-mask config (optional) ----
+    # Simplified behavior: when eval_mask is present, always evaluate on edges and
+    # always exclude the diagonal. Other legacy keys are ignored.
+    eval_mask_cfg_effective: Optional[Dict[str, Any]] = None
+    if eval_mask_cfg is not None:
+        eval_mask_cfg_effective = {
+            "mode": "edges",
+            "exclude_diag": True,
+        }
 
     output_dir = out_cfg.get("output_dir", "results")
     tag = out_cfg.get("tag", "default")
@@ -253,11 +264,30 @@ def main(
         B=B,
         alpha=alpha_ci,
         multiplier_dist=multiplier_dist,
+        eval_mask_cfg=eval_mask_cfg_effective,
         # also evaluate on test graph for coverage
         X_test=X_test,
         nbrs_idx_test=nbrs_idx_test,
         t_test=t_test,
+        A_test=A_test,
+        attn_true_test=W_true_test,
+        eval_mask_cfg_test=eval_mask_cfg_effective,
     )
+
+    def _log_eval_mask(name: str, mask: Optional[np.ndarray], cfg: Optional[Dict[str, Any]]) -> None:
+        if mask is None:
+            print(f"[eval_mask] {name}: None (uniform band uses all entries; coverage defaults to truth!=0).")
+            return
+        total = int(mask.sum())
+        per_row = mask.sum(axis=1)
+        print(
+            "[eval_mask] "
+            f"{name}: mode=edges (exclude_diag=True), selected={total} entries, "
+            f"per-row min/mean/max = {per_row.min()}/{per_row.mean():.2f}/{per_row.max()}"
+        )
+
+    _log_eval_mask("train", boot_res.eval_mask, eval_mask_cfg_effective)
+    _log_eval_mask("test", boot_res.eval_mask_test, eval_mask_cfg_effective)
 
     # ---- Coverage statistics for attention and raw scores over bootstrap prefixes ----
     def compute_coverage_over_prefixes(
@@ -265,6 +295,7 @@ def main(
         boot: np.ndarray,
         truth: np.ndarray,
         alpha: float,
+        mask: Optional[np.ndarray] = None,
     ) -> Dict[str, Any]:
         """
         Compute coverage statistics for pointwise and uniform CIs
@@ -276,8 +307,9 @@ def main(
         if prefixes[-1] != B_total:
             prefixes.append(B_total)
 
-        nonzero_mask = (truth != 0)
-        n_nonzero = int(nonzero_mask.sum())
+        # Default mask is historical behavior: only evaluate on nonzero truth entries
+        eval_mask = (truth != 0) if mask is None else mask
+        n_mask = int(eval_mask.sum())
 
         results_by_prefix: Dict[str, Any] = {}
 
@@ -294,24 +326,27 @@ def main(
             ci_hi_pw = base + radius_pointwise
 
             # Uniform band
-            max_dev = np.max(np.abs(diffs).reshape(k, -1), axis=1)  # [k]
+            if eval_mask is not None and eval_mask.any():
+                max_dev = np.max(np.abs(diffs)[:, eval_mask], axis=1)  # [k]
+            else:
+                max_dev = np.max(np.abs(diffs).reshape(k, -1), axis=1)  # [k]
             c_uniform = np.quantile(max_dev, 1.0 - alpha)
             ci_lo_unif = base - c_uniform
             ci_hi_unif = base + c_uniform
 
             # Coverage (only over nonzero true entries)
-            covered_pw = ((truth >= ci_lo_pw) & (truth <= ci_hi_pw)) & nonzero_mask
-            covered_unif = ((truth >= ci_lo_unif) & (truth <= ci_hi_unif)) & nonzero_mask
+            covered_pw = ((truth >= ci_lo_pw) & (truth <= ci_hi_pw)) & eval_mask
+            covered_unif = ((truth >= ci_lo_unif) & (truth <= ci_hi_unif)) & eval_mask
 
             covered_pw_count = int(covered_pw.sum())
             covered_unif_count = int(covered_unif.sum())
 
-            coverage_pw = covered_pw_count / n_nonzero if n_nonzero > 0 else float("nan")
-            coverage_unif = covered_unif_count / n_nonzero if n_nonzero > 0 else float("nan")
+            coverage_pw = covered_pw_count / n_mask if n_mask > 0 else float("nan")
+            coverage_unif = covered_unif_count / n_mask if n_mask > 0 else float("nan")
 
             results_by_prefix[str(k)] = {
                 "B_prefix": k,
-                "n_nonzero": n_nonzero,
+                "n_nonzero": n_mask,
                 "pointwise": {
                     "coverage": coverage_pw,
                     "covered": covered_pw_count,
@@ -335,6 +370,7 @@ def main(
         boot=boot_res.boot_attn,
         truth=W_true,
         alpha=alpha_ci,
+        mask=boot_res.eval_mask,
     )
 
     raw_coverage_train = compute_coverage_over_prefixes(
@@ -342,6 +378,7 @@ def main(
         boot=boot_res.boot_raw,
         truth=raw_scores,
         alpha=alpha_ci,
+        mask=boot_res.eval_mask,
     )
 
     # Test coverage (if available)
@@ -358,12 +395,14 @@ def main(
             boot=boot_res.boot_attn_test,
             truth=W_true_test,
             alpha=alpha_ci,
+            mask=boot_res.eval_mask_test,
         )
         raw_coverage_test = compute_coverage_over_prefixes(
             base=boot_res.base_raw_test,
             boot=boot_res.boot_raw_test,
             truth=raw_scores_test,
             alpha=alpha_ci,
+            mask=boot_res.eval_mask_test,
         )
 
     # ---- Save scalar metrics (train/test causal effect evaluation + coverage statistics) ----
@@ -382,6 +421,8 @@ def main(
     effective_boot_cfg["B"] = B
     effective_boot_cfg["alpha"] = alpha_ci
     effective_boot_cfg["multiplier_dist"] = multiplier_dist
+    if eval_mask_cfg_effective is not None:
+        effective_boot_cfg["eval_mask"] = eval_mask_cfg_effective
 
     effective_nuis_cfg = dict(nuis_cfg)
     effective_nuis_cfg["fit_nuisance"] = fit_nuisance
@@ -405,7 +446,15 @@ def main(
             },
         },
     }
-    metrics_path = os.path.join(output_dir, f"metrics_{tag_with_nuis_and_B}.json")
+    # Avoid overwriting existing outputs: append _{run_idx} where run_idx starts at 1.
+    base_metrics_path = os.path.join(output_dir, f"metrics_{tag_with_nuis_and_B}.json")
+    run_idx = 1
+    metrics_path = base_metrics_path.replace(".json", f"_{run_idx}.json")
+    while os.path.exists(metrics_path):
+        run_idx += 1
+        metrics_path = base_metrics_path.replace(".json", f"_{run_idx}.json")
+    metrics["output_run_idx"] = run_idx
+    metrics["output_path"] = metrics_path
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=2)
 
@@ -437,9 +486,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--multiplier_dist",
         type=str,
-        choices=["normal", "rademacher"],
+        choices=["normal", "rademacher", "poisson"],
         default=None,
-        help="Override bootstrap.multiplier_dist in config (normal/rademacher).",
+        help="Override bootstrap.multiplier_dist in config (normal/rademacher/poisson).",
     )
     parser.add_argument(
         "--path",

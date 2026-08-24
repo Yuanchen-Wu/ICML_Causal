@@ -30,6 +30,9 @@ bootstrap:
   B: 120
   alpha: 0.05
   multiplier_dist: "normal"       # "normal" or "rademacher"
+  # Optional evaluation mask for uniform bands / coverage (diagnostic only; does NOT affect training)
+  eval_mask:
+    mode: "edges"                 # fixed to edges; diagonal is always excluded in code
 
 train_attn:
   epochs: 400
