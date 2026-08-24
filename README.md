@@ -1,71 +1,128 @@
-# ICML_Causal: Self vs Neighbor (Spillover) Effects on Graphs
+# Smart Bootstrap Inference for Causal Effects on Graphs
 
-This repository contains a lightweight framework to study and estimate individual causal effects on graphs, decomposed into:
-- Individual Main Effect (IME): direct/self effect g(X_i) on node i
-- Individual Spillover Effect (ISE): neighbor-induced effect via attention weights w_ij = f(X_i, X_j)
-- Individual Total Effect (ITE): IME + ISE
+This branch implements simulation, estimation, and bootstrap inference for
+individual causal effects under network interference. It separates each
+node's effect into:
 
-The code supports two outcome specifications and a low-dimensional variant for attention:
-- Outcome mode
-  - with_self: attention normalization includes the node itself
-  - separate_self: excludes self from neighbor normalization and models self-treatment with a separate head g(X_i)
-- Low-dimensional attention
-  - low_dimension=True restricts both f and g to use only the first feature of X (all other components still use full X)
+- **Individual Main Effect (IME):** the direct/self-treatment effect.
+- **Individual Spillover Effect (ISE):** the effect transmitted through neighbors.
+- **Individual Total Effect (ITE):** IME + ISE.
 
-## Install
+Experiments can use an observed network from an NPZ file or a synthetic
+stochastic block model (SBM).
+
+## Features
+
+- One-head (`with_self`) and two-head (`separate_self`) attention models.
+- Full- and low-dimensional attention specifications.
+- Oracle or fitted nuisance functions.
+- Exact multiplier bootstrap and one-step infinitesimal jackknife (IJ)
+  approximation.
+- Paired exact-versus-IJ comparisons using shared bootstrap multipliers.
+- Normal, Rademacher, and Poisson multipliers.
+- Pointwise and uniform confidence intervals and coverage diagnostics.
+- Separate train/test coverage evaluation and optional node-level CI snapshots.
+- Analysis notebooks for coverage, interval length, damping sensitivity, and
+  train-fraction comparisons.
+
+## Installation
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Yuanchen-Wu/ICML_Causal.git
 cd ICML_Causal
-pip install -r requirements.txt
+git checkout bootstrap
+python -m pip install -r requirements.txt
 ```
 
-PyTorch is listed as a CPU build by default. If you have CUDA, install the appropriate wheel from the PyTorch website.
+The requirements install the CPU-compatible PyTorch package. Install the
+appropriate PyTorch build separately if GPU acceleration is required.
 
-## Quick start (notebooks)
+## Quick start
 
-Open one of the notebooks in Jupyter:
-- experiment_separate_self_neighbor.ipynb
-  - Full-dimensional attention (low_dimension=False)
-  - Toggle outcome_mode between "with_self" and "separate_self"
-- experiment_lowdim_separate_self_neighbor.ipynb
-  - Low-dimensional attention (low_dimension=True)
+Run the synthetic SBM experiment:
 
-Each notebook:
-1) Loads dataset splits from dataset/*.npz
-2) Simulates treatment and outcomes according to outcome_mode
-3) Fits nuisance models (propensity, mean outcome) on full X
-4) Fits attention model matching outcome_mode (one-head vs two-head) and low_dimension
-5) Reports IME/ISE/ITE and evaluation metrics (AME, PEHE)
+```bash
+python run_experiment_sbm.py --config config_experiment_sbm.yaml
+```
 
-## Key configuration knobs
+Run an experiment on an NPZ network in `dataset/`:
 
-- outcome_mode: "with_self" or "separate_self"
-- low_dimension: True or False (attention f and g use X[:, 0] when True)
-- attn_temperature: softmax temperature for attention
-- Training (epochs, lr, batch_size, patience)
+```bash
+python run_experiment.py --config config_experiment.yaml
+```
+
+The scripts write uniquely numbered JSON metric files to the configured
+`output.output_dir` (default: `results/`).
+
+### Command-line overrides
+
+Common SBM overrides include:
+
+```bash
+python run_experiment_sbm.py \
+  --config config_experiment_sbm.yaml \
+  --B 200 \
+  --alpha 0.05 \
+  --bootstrap_method ij \
+  --multiplier_dist normal \
+  --seed 41
+```
+
+Use `--bootstrap_method exact`, `ij`, or `both`. The `both` option runs a
+paired comparison. Other overrides include `--fit_nuisance`,
+`--train_fraction`, `--ij_damping`, and `--ij_diag`.
+
+For observed-network experiments, `run_experiment.py` supports `--B`,
+`--fit_nuisance`, `--multiplier_dist`, and `--path`.
+
+## Configuration
+
+The YAML files organize settings into five sections:
+
+- `experiment`: graph/data source, outcome model, attention similarity, and
+  data-generating parameters.
+- `nuisance`: fitted (`true`) or oracle (`false`) nuisance functions.
+- `bootstrap`: replicate count, confidence levels, multiplier distribution,
+  exact/IJ method, solver settings, evaluation scope, and CI snapshots.
+- `train_attn`: optimization, device, seed, and early-stopping settings.
+- `output`: output directory and filename tag/prefix.
+
+For SBM experiments, `experiment.sbm_splits` configures separate training and
+evaluation graph sizes and edge probabilities. `bootstrap.alpha` accepts one
+value or a list in the SBM runner.
+
+## Data format
+
+Observed-network datasets are loaded from `dataset/<experiment.path>`. Each
+NPZ file is expected to provide:
+
+- The configured feature array (for example, `lda_supervised`).
+- `adj_matrix`, stored as a SciPy sparse matrix.
+- `fold`, containing split labels used to construct train/validation/test sets.
 
 ## Project structure
 
-- model/
-  - interference.py: attention models
-    - GCNWithAttentionOneHead (with_self)
-    - GCNWithAttentionTwoHead (separate_self: neighbor + self heads)
-- simulation.py: data generation, attention ground truth, outcome computation
-- train.py: training loops and FitResult wrappers
-- metric.py: effect decomposition and evaluation utilities
-- dataset/: NPZ datasets (features, adjacency, folds)
-- experiment_*.ipynb: end-to-end experiments
-- requirements.txt: Python dependencies
+- `run_experiment.py`: observed-network experiment runner.
+- `run_experiment_sbm.py`: synthetic SBM runner with exact/IJ inference.
+- `config_experiment.yaml`: observed-network configuration.
+- `config_experiment_sbm.yaml`: SBM and IJ configuration.
+- `addition.py`: SBM graph and covariate generation.
+- `simulation.py`: treatment and outcome simulation.
+- `model/interference.py`: one- and two-head graph attention models.
+- `train.py`: model fitting and bootstrap implementations.
+- `metric.py`: causal-effect evaluation metrics.
+- `experiment_*.ipynb`: interactive end-to-end experiments.
+- `aggregate_*.ipynb`, `plot_*.ipynb`: result aggregation and visualization.
 
 ## Reproducibility notes
 
-- Nuisance models (propensity, mean) always use full X
-- Attention models use full X unless low_dimension=True
-- Treatment simulation and baseline outcome always use full X
+- Set `train_attn.seed` or pass `--seed` to reproduce SBM runs.
+- Nuisance models use the full covariate matrix.
+- Attention models use the full covariate matrix unless
+  `low_dimension: true`.
+- `alpha_treat` controls treatment assignment; `bootstrap.alpha` controls the
+  confidence level.
 
 ## License
 
-Add a license of your choice (e.g., MIT) before open-sourcing.
-
-
+No license has been added yet.

@@ -1,0 +1,314 @@
+{
+  "train": {
+    "IME_AME": -0.00252,
+    "ISE_AME": 0.05707,
+    "ITE_AME": 0.05455,
+    "IME_PEHE": 0.03862,
+    "ISE_PEHE": 0.10679,
+    "ITE_PEHE": 0.11414
+  },
+  "test": {
+    "IME_AME": -0.001,
+    "ISE_AME": 0.06345,
+    "ITE_AME": 0.06245,
+    "IME_PEHE": 0.03774,
+    "ISE_PEHE": 0.13923,
+    "ITE_PEHE": 0.14301
+  },
+  "train_cfg_attn": {
+    "epochs": 400,
+    "lr": 0.0003,
+    "batch_size": 64,
+    "patience": 12,
+    "device": "cpu",
+    "log_every": 1,
+    "weight_decay": 0.0,
+    "seed": 41,
+    "verbose": true
+  },
+  "attn_cfg": {
+    "hidden_dim": 64,
+    "separate_self": true,
+    "low_dimension": false
+  },
+  "bootstrap": {
+    "B": 150,
+    "alpha": 0.05,
+    "multiplier_dist": "normal"
+  },
+  "nuisance": {
+    "fit_nuisance": false
+  },
+  "experiment": {
+    "path": "Flickr_New.npz",
+    "feature_name": "lda_supervised",
+    "fold_num": 2,
+    "outcome_mode": "separate_self",
+    "low_dimension": false,
+    "f_type": "cosine",
+    "g_type": "heter",
+    "attn_temperature": 0.0,
+    "beta": 1.0,
+    "alpha": 2.0,
+    "sigma": 0.05,
+    "scale": 5.0,
+    "num_partition": 3,
+    "ratio_self": 1.0
+  },
+  "coverage": {
+    "attention": {
+      "B_total": 150,
+      "alpha": 0.05,
+      "n_nonzero": 174308,
+      "by_prefix": {
+        "15": {
+          "B_prefix": 15,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.7907267595291094,
+            "covered": 137830
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "30": {
+          "B_prefix": 30,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.8493471326617252,
+            "covered": 148048
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "45": {
+          "B_prefix": 45,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.8511370677192097,
+            "covered": 148360
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "60": {
+          "B_prefix": 60,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.8727023429790944,
+            "covered": 152119
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "75": {
+          "B_prefix": 75,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.8813364848429217,
+            "covered": 153624
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "90": {
+          "B_prefix": 90,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.8821167129449021,
+            "covered": 153760
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "105": {
+          "B_prefix": 105,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.8819273928907451,
+            "covered": 153727
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "120": {
+          "B_prefix": 120,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.8815889115817978,
+            "covered": 153668
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "135": {
+          "B_prefix": 135,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.875438878307364,
+            "covered": 152596
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "150": {
+          "B_prefix": 150,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.8744750671225646,
+            "covered": 152428
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        }
+      }
+    },
+    "raw_scores": {
+      "B_total": 150,
+      "alpha": 0.05,
+      "n_nonzero": 174308,
+      "by_prefix": {
+        "15": {
+          "B_prefix": 15,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.7815705532735159,
+            "covered": 136234
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "30": {
+          "B_prefix": 30,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.827695802831769,
+            "covered": 144274
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "45": {
+          "B_prefix": 45,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.8279597035133213,
+            "covered": 144320
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "60": {
+          "B_prefix": 60,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.859467150102118,
+            "covered": 149812
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "75": {
+          "B_prefix": 75,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.8709640406636528,
+            "covered": 151816
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "90": {
+          "B_prefix": 90,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.8796211304128324,
+            "covered": 153325
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "105": {
+          "B_prefix": 105,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.881227482387498,
+            "covered": 153605
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "120": {
+          "B_prefix": 120,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.8813422218142598,
+            "covered": 153625
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "135": {
+          "B_prefix": 135,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.8748364963168644,
+            "covered": 152491
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        },
+        "150": {
+          "B_prefix": 150,
+          "n_nonzero": 174308,
+          "pointwise": {
+            "coverage": 0.8727310278357849,
+            "covered": 152124
+          },
+          "uniform": {
+            "coverage": 1.0,
+            "covered": 174308
+          }
+        }
+      }
+    }
+  }
+}

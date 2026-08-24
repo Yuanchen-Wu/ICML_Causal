@@ -1,0 +1,59 @@
+experiment:
+  # Dataset and features
+  path: "Flickr_New.npz"          # or "BC_New.npz"
+  feature_name: "lda_supervised"
+  fold_num: 2
+
+  # Outcome mode: "with_self" (single-head) or "separate_self" (two-head)
+  outcome_mode: "separate_self"
+  low_dimension: false            # whether to use only the first feature dim in f and g
+
+  # Attention similarity types
+  f_type: "cosine"                # neighbor attention f(X_i, X_j)
+  g_type: "heter"                 # self-treatment g(X_i) (used only if outcome_mode == "separate_self")
+  attn_temperature: 0.0
+
+  # Semi-synthetic treatment/outcome generation hyperparameters
+  beta: 1.0
+  alpha_treat: 2.0
+  sigma: 0.05
+  scale: 5.0
+  num_partition: 3
+  ratio_self: 1.0                 # weight of self vs neighbors in separate_self mode
+
+nuisance:
+  # If true, fit nuisance models to obtain (mu_hat, e_hat).
+  # If false, skip nuisance fitting and use oracle (m_star, e_star) instead.
+  fit_nuisance: false
+
+bootstrap:
+  B: 120
+  alpha: 0.05
+  multiplier_dist: "normal"       # "normal" or "rademacher"
+  # Optional evaluation mask for uniform bands / coverage (diagnostic only; does NOT affect training)
+  eval_mask:
+    mode: "edges"                 # fixed to edges; diagonal is always excluded in code
+
+train_attn:
+  epochs: 400
+  lr: 3.0e-4
+  batch_size: 64
+  patience: 12
+  device: "cpu"
+  log_every: 1
+  weight_decay: 0.0
+  seed: 41
+  verbose: true
+
+attn_cfg:
+  hidden_dim: 64
+  # If omitted here, attn_temperature will default to experiment.attn_temperature
+  # attn_temperature: 0.0
+  separate_self: true             # should match outcome_mode == "separate_self"
+  low_dimension: false
+
+output:
+  output_dir: "results"
+  tag: "flickr_separate_self"
+
+

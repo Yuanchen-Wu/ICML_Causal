@@ -70,7 +70,15 @@ def heter_nonlinear(X, coefs=(0.1, 0.3, -0.2, 0.2, 0.2, 0.3)):
   )
   return tau
 
-def get_true_attention(X, A, name, attn_temperature, low_dimension: bool = False):
+
+def get_true_attention(X, A, name, attn_temperature, low_dimension: bool = False, **kwargs):
+  """
+  Return (W_true, raw_scores) for neighbor spillover.
+
+  For most names, raw_scores = similarity(X_i, X_j) * A_ij and W_true applies the
+  legacy row_sparse_softmax transformation with attn_temperature.
+
+  """
   X_use = X[:, :1] if low_dimension else X
   if name == "rbf":
     func = np.exp(-0.5 * (cdist(X_use, X_use, metric='euclidean') ** 2))
@@ -84,14 +92,22 @@ def get_true_attention(X, A, name, attn_temperature, low_dimension: bool = False
     func = np.tile(X_use.dot(beta), (X_use.shape[0], 1))
   if name == "heter_nonlinear":
     func = np.tile(heter_nonlinear(X_use), (X_use.shape[0], 1))
-  true_attention = row_sparse_softmax(func * A, b=attn_temperature)
-  return true_attention
+  raw_scores = func * A
+  W_true = row_sparse_softmax(raw_scores, b=attn_temperature)
+  return W_true, raw_scores
 
-def get_true_attention_no_self(X, A, name, attn_temperature, low_dimension: bool = False):
-  """Neighbor attention excluding self (diagonal zero) with row-wise softmax on non-zeros."""
+def get_true_attention_no_self(X, A, name, attn_temperature, low_dimension: bool = False, **kwargs):
+  """Neighbor attention excluding self (diagonal forced to zero before dispatch)."""
   A_no_self = A.copy()
   np.fill_diagonal(A_no_self, 0.0)
-  return get_true_attention(X, A_no_self, name=name, attn_temperature=attn_temperature, low_dimension=low_dimension)
+  return get_true_attention(
+    X,
+    A_no_self,
+    name=name,
+    attn_temperature=attn_temperature,
+    low_dimension=low_dimension,
+    **kwargs,
+  )
 
 def get_self_treatment_effect(X, name, seed=42, low_dimension: bool = False, w_self: float = 1.0):
   """Generate per-node scalar self-treatment effect g(X_i) for given name.
@@ -139,28 +155,42 @@ def compute_outcome(
     - Attention excludes self; y = spillover + g(X_i)*t_i + U_0 + noise
     - Requires t; returns g_true as last element
 
-  Returns (true_attention, spillover, U_0, noise, y, m_star, g_true)
+  Returns (W_true, spillover_true, U_0, noise, y, m_star, self_effect_true, raw_scores)
   """
   if outcome_mode == "with_self":
-    true_attention = get_true_attention(X, A, name=name, attn_temperature=attn_temperature, low_dimension=low_dimension)
-    spillover = np.sum(treat_matrix * true_attention, axis=1)
+    W_true, raw_scores = get_true_attention(
+      X,
+      A,
+      name=name,
+      attn_temperature=attn_temperature,
+      low_dimension=low_dimension,
+      **kwargs,
+    )
+    spillover_true = np.sum(treat_matrix * W_true, axis=1)
     U_0, noise = get_base(X, sigma=sigma, scale=scale)
-    y = spillover + U_0 + noise
-    m_star = U_0 + np.sum(np.tile(e_star, (n, 1)) * A * true_attention, axis=1)
-    g_true = None
-    return true_attention, spillover, U_0, noise, y, m_star, g_true
+    y = spillover_true + U_0 + noise
+    m_star = U_0 + np.sum(np.tile(e_star, (n, 1)) * A * W_true, axis=1)
+    self_effect_true = None
+    return W_true, spillover_true, U_0, noise, y, m_star, self_effect_true, raw_scores
 
   # separate_self
   if t is None:
     raise ValueError("t is required when outcome_mode='separate_self'")
-  true_attention = get_true_attention_no_self(X, A, name=name, attn_temperature=attn_temperature, low_dimension=low_dimension)
+  W_true, raw_scores = get_true_attention_no_self(
+    X,
+    A,
+    name=name,
+    attn_temperature=attn_temperature,
+    low_dimension=low_dimension,
+    **kwargs,
+  )
   A_no_self = A.copy(); np.fill_diagonal(A_no_self, 0.0)
-  spillover = np.sum((treat_matrix * (1 - np.eye(n))) * true_attention, axis=1)
+  spillover_true = np.sum((treat_matrix * (1 - np.eye(n))) * W_true, axis=1)
   U_0, noise = get_base(X, sigma=sigma, scale=scale)
-  g_true = get_self_treatment_effect(X, name=self_name or name, low_dimension=low_dimension, w_self=w_self)
-  y = spillover + g_true * t + U_0 + noise
-  m_star = U_0 + np.sum(np.tile(e_star, (n, 1)) * A_no_self * true_attention, axis=1) + g_true * e_star
-  return true_attention, spillover, U_0, noise, y, m_star, g_true
+  self_effect_true = get_self_treatment_effect(X, name=self_name or name, low_dimension=low_dimension, w_self=w_self)
+  y = spillover_true + self_effect_true * t + U_0 + noise
+  m_star = U_0 + np.sum(np.tile(e_star, (n, 1)) * A_no_self * W_true, axis=1) + self_effect_true * e_star
+  return W_true, spillover_true, U_0, noise, y, m_star, self_effect_true, raw_scores
 
 def simulate_treatment(X, A, mode="train", beta=1.0, alpha=0.0, random_state=41, num_partitions=5, include_self_loop=True):
   A = A - np.eye(A.shape[0])
